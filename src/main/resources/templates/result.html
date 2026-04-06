@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <title>AI Result</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f1f5f9;
+            font-family: Arial, sans-serif;
+        }
+
+        .chat-container {
+            max-width: 900px;
+            margin: auto;
+            padding-top: 60px;
+        }
+
+        .chat-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        .chat-header {
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .message {
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            line-height: 1.7;
+            font-size: 16px;
+            white-space: pre-wrap;
+        }
+
+        .ai-msg {
+            background: #f3f4f6;
+            text-align: left;
+        }
+
+        .user-msg {
+            background: #dbeafe;
+            text-align: right;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        .back-btn {
+            margin-top: 25px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="chat-container">
+        <div class="chat-card">
+            <div class="chat-header">🤖 AI Career Assistant</div>
+
+            <!-- Chat messages container -->
+            <div id="chat-box" style="max-height:500px; overflow-y:auto;">
+                <!-- Optional initial message -->
+                <div class="message ai-msg">
+                    Welcome! Ask me anything about your career or skills.
+                </div>
+            </div>
+
+            <!-- Input to send questions -->
+            <div class="chat-input">
+                <input type="text" id="chat-question" placeholder="Type your question..." />
+                <button id="chat-send" class="btn btn-dark">Send</button>
+            </div>
+
+            <!-- Back to dashboard -->
+            <div class="text-center back-btn">
+                <a href="/career/dashboard" class="btn btn-primary">⬅ Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById("chat-box");
+        const input = document.getElementById("chat-question");
+        const sendBtn = document.getElementById("chat-send");
+
+        sendBtn.addEventListener("click", sendMessage);
+        input.addEventListener("keypress", function (e) {
+            if (e.key === "Enter") sendMessage();
+        });
+
+        function appendMessage(text, type) {
+            const div = document.createElement("div");
+            div.className = `message ${type}-msg`;
+            div.innerText = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function sendMessage() {
+            const question = input.value.trim();
+            if (!question) return;
+
+            appendMessage(question, "user");
+            input.value = "";
+
+            appendMessage("🤔 Thinking...", "ai");
+
+            fetch("/career/ai/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ question: question })
+            })
+                .then(res => res.text())
+                .then(data => {
+                    const lastMsg = chatBox.querySelector(".ai-msg:last-child");
+                    if (lastMsg && lastMsg.innerText === "🤔 Thinking...") lastMsg.remove();
+
+                    appendMessage(data, "ai");
+                })
+                .catch(err => {
+                    const lastMsg = chatBox.querySelector(".ai-msg:last-child");
+                    if (lastMsg && lastMsg.innerText === "🤔 Thinking...") lastMsg.remove();
+                    appendMessage("Error connecting to AI.", "ai");
+                    console.error(err);
+                });
+        }
+    </script>
+</body>
+</html>
