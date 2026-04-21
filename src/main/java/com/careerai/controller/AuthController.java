@@ -6,6 +6,7 @@ import com.careerai.service.EmailService;
 import com.careerai.util.OTPGenerator;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,9 @@ public class AuthController {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     // ================= LOGIN PAGE =================
     @GetMapping("/login")
     public String showLogin() {
@@ -38,55 +42,54 @@ public class AuthController {
         return "register";
     }
 
+
+
     // ================= REGISTER USER =================
     @PostMapping("/register-user")
     public String registerUser(@ModelAttribute User user,
                                @RequestParam("photoFile") MultipartFile photoFile,
                                Model model) throws IOException {
 
-        // Duplicate email check
-        if(userRepository.existsByEmail(user.getEmail())){
+        if (userRepository.existsByEmail(user.getEmail())) {
             model.addAttribute("error", "Email already registered!");
             return "register";
         }
 
-        // Handle file upload
-        if(photoFile != null && !photoFile.isEmpty()){
+        // File upload
+        if (photoFile != null && !photoFile.isEmpty()) {
             String uploadDir = System.getProperty("user.dir") + "/uploads/";
             File dir = new File(uploadDir);
-            if(!dir.exists()) dir.mkdirs();
+            if (!dir.exists()) dir.mkdirs();
 
             String fileName = System.currentTimeMillis() + "_" + photoFile.getOriginalFilename();
             File saveFile = new File(uploadDir + fileName);
             photoFile.transferTo(saveFile);
 
-            // Save file name to DB
             user.setPhoto(fileName);
         }
 
-        // Generate OTP and mark unverified
+        // 🔥 Encode password
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+
+        // OTP
         String otp = OTPGenerator.generateOTP(6);
         user.setOtp(otp);
         user.setVerified(false);
 
         userRepository.save(user);
 
-        // Send verification email
-        String subject = "Verify your AI Career Account";
-        String message = "Hello " + user.getName() + ",\n\n"
-                       + "Your OTP to verify your email is: " + otp + "\n\n"
-                       + "Regards,\nAI Career Team";
+        // Email
+        emailService.sendEmail(
+                user.getEmail(),
+                "Verify Account",
+                "Hello " + user.getName() + ", OTP: " + otp
+        );
 
-        emailService.sendEmail(user.getEmail(), subject, message);
-
-        model.addAttribute("success", "Registration successful! OTP sent to your email.");
         model.addAttribute("email", user.getEmail());
-
         return "verify-otp";
     }
 
-
-    // ================= VERIFY EMAIL OTP =================
+    // ================= VERIFY OTP =================
     @PostMapping("/verify-otp")
     public String verifyOtp(@RequestParam String email,
                             @RequestParam String otp,
@@ -109,45 +112,12 @@ public class AuthController {
 
         user.setVerified(true);
         user.setOtp(null);
-
         userRepository.save(user);
-
-        model.addAttribute("success", "Email verified successfully. Please login.");
 
         return "login";
     }
 
-    // ================= LOGIN USER =================
-    @PostMapping("/login-user")
-    public String loginUser(@RequestParam String email,
-                            @RequestParam String password,
-                            HttpSession session,
-                            Model model) {
-
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-
-        if (optionalUser.isEmpty()) {
-            model.addAttribute("error", "User not found");
-            return "login";
-        }
-
-        User user = optionalUser.get();
-
-        if (!user.isVerified()) {
-            model.addAttribute("error", "Please verify your email first.");
-            return "login";
-        }
-
-        if (!user.getPassword().equals(password)) {
-            model.addAttribute("error", "Invalid password");
-            return "login";
-        }
-
-        session.setAttribute("userId", user.getId());
-        session.setAttribute("user", user);
-
-        return "redirect:/career/dashboard";
-    }
+   
 
     // ================= FORGOT PASSWORD =================
     @GetMapping("/forgot-password")
@@ -168,19 +138,12 @@ public class AuthController {
         User user = optionalUser.get();
 
         String otp = OTPGenerator.generateOTP(6);
-
         user.setOtp(otp);
         userRepository.save(user);
 
-        String subject = "Password Reset OTP";
-        String message =
-                "Hello " + user.getName() + ",\n\n"
-                + "Your OTP to reset password is: " + otp;
-
-        emailService.sendEmail(user.getEmail(), subject, message);
+        emailService.sendEmail(email, "Reset OTP", "OTP: " + otp);
 
         model.addAttribute("email", email);
-
         return "verify-reset-otp";
     }
 
@@ -206,7 +169,6 @@ public class AuthController {
         }
 
         model.addAttribute("email", email);
-
         return "reset-password";
     }
 
@@ -225,12 +187,9 @@ public class AuthController {
 
         User user = optionalUser.get();
 
-        user.setPassword(password);
+        user.setPassword(passwordEncoder.encode(password));
         user.setOtp(null);
-
         userRepository.save(user);
-
-        model.addAttribute("success", "Password reset successfully. Please login.");
 
         return "login";
     }
@@ -240,8 +199,6 @@ public class AuthController {
     public String logout(HttpSession session) {
 
         session.invalidate();
-
         return "redirect:/login";
     }
-
 }
